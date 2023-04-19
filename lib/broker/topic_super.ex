@@ -17,7 +17,7 @@ defmodule Broker.TopicSuper do
           {:ok, pid} ->
             Broker.Topic.publish(pid, data)
           {:error} ->
-            Logger.info("Error publishing message on topic #{topic}")
+            Logger.info("[#{__MODULE__}] Error publishing message on topic #{topic}")
         end
       pid ->
         Broker.Topic.publish(pid, data)
@@ -30,10 +30,10 @@ defmodule Broker.TopicSuper do
       start: {Broker.Topic, :start_link, [topic]}
     }) do
       {:ok, pid} ->
-        Logger.info("Topic #{topic} created")
+        Logger.info("[#{__MODULE__}] Topic #{topic} created")
         {:ok, pid}
       {:error, _} ->
-        Logger.info("Error creating topic #{topic}")
+        Logger.info("[#{__MODULE__}] Error creating topic #{topic}")
         {:error}
     end
   end

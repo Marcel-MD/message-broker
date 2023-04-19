@@ -11,11 +11,11 @@ defmodule Broker.Topic do
   end
 
   def publish(pid, data) do
-    GenServer.call(pid, {:publish, data})
+    GenServer.cast(pid, {:publish, data})
   end
 
-  def handle_call({:publish, data}, _from, topic) do
-    Logger.info("Publishing message on topic #{topic}: #{data}")
-    {:reply, :ok, topic}
+  def handle_cast({:publish, data}, topic) do
+    Consumer.ClientManager.notify(topic, data)
+    {:noreply, topic}
   end
 end

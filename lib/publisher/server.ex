@@ -4,7 +4,7 @@ defmodule Publisher.Server do
   def accept(port) do
     {:ok, socket} =
       :gen_tcp.listen(port, [:binary, packet: :line, active: false, reuseaddr: true])
-    Logger.info("Accepting connections on port #{port}")
+    Logger.info("[#{__MODULE__}] Accepting publishers on port #{port}")
     loop_acceptor(socket)
   end
 
