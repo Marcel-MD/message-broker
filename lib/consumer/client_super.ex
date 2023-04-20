@@ -18,8 +18,8 @@ defmodule Consumer.ClientSuper do
       {:ok, pid} ->
         Logger.info("[#{__MODULE__}] Client #{inspect pid} created")
         {:ok, pid}
-      {:error, _} ->
-        Logger.info("[#{__MODULE__}] Error creating client")
+      {:error, err} ->
+        Logger.error("[#{__MODULE__}] Error creating client Error: #{inspect err}")
         {:error}
     end
   end

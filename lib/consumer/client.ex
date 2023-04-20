@@ -17,9 +17,7 @@ defmodule Consumer.Client do
   end
 
   def handle_cast({:notify, topic, data}, socket) do
-    write_line("BEGIN #{topic}\n", socket)
-    write_line(data, socket)
-    write_line("END\n", socket)
+    write_data(topic, data, socket)
     {:noreply, socket}
   end
 
@@ -31,15 +29,23 @@ defmodule Consumer.Client do
             topic = String.trim(topic)
             Logger.info("[#{__MODULE__}] Subscribing to topic #{topic}")
             Consumer.ClientManager.subscribe(client_pid, topic)
+            messages = Broker.TopicSuper.get_data(topic)
+            Enum.each(messages, fn {_, data} -> write_data(topic, data, socket) end)
           ["UNSUBSCRIBE", topic] ->
             topic = String.trim(topic)
             Logger.info("[#{__MODULE__}] Unsubscribing from topic #{topic}")
             Consumer.ClientManager.unsubscribe(client_pid, topic)
         end
       {:error, err} ->
-        Logger.info("[#{__MODULE__}] Error: #{inspect err}")
+        Logger.error("[#{__MODULE__}] Error: #{inspect err}")
     end
     serve(socket, client_pid)
+  end
+
+  defp write_data(topic, data, socket) do
+    write_line("BEGIN #{topic}\n", socket)
+    write_line(data, socket)
+    write_line("END\n", socket)
   end
 
   defp write_line(line, socket) do

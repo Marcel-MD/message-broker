@@ -17,10 +17,24 @@ defmodule Broker.TopicSuper do
           {:ok, pid} ->
             Broker.Topic.publish(pid, data)
           {:error} ->
-            Logger.info("[#{__MODULE__}] Error publishing message on topic #{topic}")
+            Logger.error("[#{__MODULE__}] Error publishing message on topic #{topic}")
         end
       pid ->
         Broker.Topic.publish(pid, data)
+    end
+  end
+
+  def get_data(topic) do
+    case get_worker_pid(topic) do
+      nil ->
+        case new_topic(topic) do
+          {:ok, pid} ->
+            Broker.Topic.get_data(pid)
+          {:error} ->
+            Logger.error("[#{__MODULE__}] Error getting data from topic #{topic}")
+        end
+      pid ->
+        Broker.Topic.get_data(pid)
     end
   end
 
@@ -32,8 +46,8 @@ defmodule Broker.TopicSuper do
       {:ok, pid} ->
         Logger.info("[#{__MODULE__}] Topic #{topic} created")
         {:ok, pid}
-      {:error, _} ->
-        Logger.info("[#{__MODULE__}] Error creating topic #{topic}")
+      {:error, err} ->
+        Logger.error("[#{__MODULE__}] Error creating topic #{topic} Error: #{inspect err}")
         {:error}
     end
   end
