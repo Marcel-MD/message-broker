@@ -37,7 +37,7 @@ defmodule Consumer.Client do
             Consumer.ClientManager.unsubscribe(client_pid, topic)
         end
       {:error, err} ->
-        Logger.error("[#{__MODULE__}] Error: #{inspect err}")
+        Logger.error("[#{__MODULE__}] : #{inspect err}")
     end
     serve(socket, client_pid)
   end

@@ -47,7 +47,7 @@ defmodule Broker.TopicSuper do
         Logger.info("[#{__MODULE__}] Topic #{topic} created")
         {:ok, pid}
       {:error, err} ->
-        Logger.error("[#{__MODULE__}] Error creating topic #{topic} Error: #{inspect err}")
+        Logger.error("[#{__MODULE__}] Error creating topic #{topic} : #{inspect err}")
         {:error}
     end
   end
