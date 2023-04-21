@@ -20,7 +20,7 @@ $ mix run --no-halt
 or using `docker-compose`:
 
 ```bash
-$ docker-compose up
+$ docker compose up
 ```
 
 ## Publisher
