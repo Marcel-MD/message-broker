@@ -1,0 +1,24 @@
+@startuml
+
+[Message Broker] as MB
+[Publisher Server] as PS
+[Broker Topic Supervisor] as BTS
+[Consumer Client Manager] as CCM
+[Consumer Client Supervisor] as CCS
+[Consumer Server] as CS
+
+MB --> PS
+MB ---> BTS
+MB ---> CCM
+MB ---> CCS
+MB --> CS
+
+BTS --> [Topic #1]
+BTS --> [Topic #2]
+BTS --> [Topic #3]
+
+CCS --> [Client #1]
+CCS --> [Client #2]
+CCS --> [Client #3]
+
+@enduml

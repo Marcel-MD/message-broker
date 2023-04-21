@@ -1,0 +1,26 @@
+@startuml
+
+actor "Publishers" as P
+participant "Publisher Server" as PS
+participant "Broker Topic Supervisor" as BTS
+collections "Broker Topics" as BT
+participant "Consumer Client Supervisor" as CCS
+participant "Consumer Client Manager" as CCM
+collections "Consumer Clients" as CC
+participant "Consumer Server" as CS
+actor "Consumers" as C
+
+C -> CS: Connect
+CS -> CCS: New Client
+C -> CC: Subscribe
+CC -> CCM: Topic
+
+P -> PS: Message & Topic
+PS -> BTS: Message & Topic
+BTS -> BT: Message & Topic
+BT -> CCM: Message & Topic
+CCM -> CC: Message & Topic
+CC -> C: Message & Topic
+CC <-- C: Hash
+
+@enduml
