@@ -16,21 +16,24 @@ defmodule Publisher.Server do
   end
 
   defp serve(socket) do
-    case read_topic(socket) do
-      {:ok, topic} ->
+    case read_topics(socket) do
+      {:ok, topics} ->
         data = read_data(socket, "")
-        Broker.TopicSuper.publish(topic, data)
+        Broker.TopicSuper.publish(topics, data)
       {:error} ->
         write_line("ERROR", socket)
     end
     serve(socket)
   end
 
-  defp read_topic(socket) do
+  defp read_topics(socket) do
     case :gen_tcp.recv(socket, 0) do
       {:ok, line} ->
-        ["BEGIN", topic] = String.split(line, " ")
-        {:ok, String.trim(topic)}
+        ["BEGIN" | topics] = String.split(line, " ")
+        clean_topics = Enum.reject(topics, &(&1 == "" || &1 == "\n"))
+          |> Enum.uniq()
+          |> Enum.map(&String.trim/1)
+        {:ok, clean_topics}
       {:error, _reason} ->
         {:error}
     end

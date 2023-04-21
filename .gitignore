@@ -24,8 +24,3 @@ message_broker-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
-
-# Ignore dets files
-/*
-/!*/
-/!*.*

@@ -1,0 +1,6 @@
+services:
+  message-broker:
+    build: .
+    ports:
+      - "4040:4040"
+      - "4041:4041"
