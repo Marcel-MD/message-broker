@@ -9,35 +9,79 @@ defmodule Consumer.Client do
   def init(socket) do
     client_pid = self()
     Task.start_link(fn -> serve(socket, client_pid) end)
-    {:ok, {socket, []}}
+    {:ok, {socket, [], ""}}
+  end
+
+  def login(pid, name) do
+    GenServer.cast(pid, {:login, name})
+  end
+
+  def subscribe(pid, topic) do
+    GenServer.cast(pid, {:subscribe, topic})
+  end
+
+  def unsubscribe(pid, topic) do
+    GenServer.cast(pid, {:unsubscribe, topic})
   end
 
   def ack(pid, hash) do
     GenServer.cast(pid, {:ack, hash})
   end
 
-  def notify(pid, topic, data) do
-    GenServer.cast(pid, {:notify, topic, data})
+  def notify(pid, topic, data, msg_id) do
+    GenServer.cast(pid, {:notify, topic, data, msg_id})
   end
 
-  def handle_cast({:notify, topic, data}, {socket, messages}) do
-    messages = messages ++ [{topic, data}]
+  def handle_cast({:login, name}, {socket, messages, _}) do
+    {:noreply, {socket, messages, name}}
+  end
+
+  def handle_cast({:subscribe, topic}, {socket, messages, name}) do
+    if name == "" do
+      write_line("ERROR LOGIN FIRST\n", socket)
+      {:noreply, {socket, messages, name}}
+    else
+      Logger.info("[#{__MODULE__}] Subscribing to topic #{topic}")
+      Consumer.ClientManager.subscribe(self(), topic)
+      new_messages = Broker.TopicSuper.get_data(topic, name)
+      Enum.each(new_messages, fn {_, data, _} -> write_data(topic, data, socket) end)
+      messages = messages ++ new_messages
+      {:noreply, {socket, messages, name}}
+    end
+  end
+
+  def handle_cast({:unsubscribe, topic}, {socket, messages, name}) do
+    if name == "" do
+      write_line("ERROR LOGIN FIRST\n", socket)
+      {:noreply, {socket, messages, name}}
+    else
+      Logger.info("[#{__MODULE__}] Unsubscribing from topic #{topic}")
+      Consumer.ClientManager.unsubscribe(self(), topic)
+      messages = Enum.filter(messages, fn {t, _, _} -> t != topic end)
+      {:noreply, {socket, messages, name}}
+    end
+  end
+
+  def handle_cast({:notify, topic, data, msg_id}, {socket, messages, name}) do
+    messages = messages ++ [{topic, data, msg_id}]
     write_data(topic, data, socket)
-    {:noreply, {socket, messages}}
+    {:noreply, {socket, messages, name}}
   end
 
-  def handle_cast({:ack, hash}, {socket, messages}) do
+  def handle_cast({:ack, hash}, {socket, messages, name}) do
     case messages do
       [] ->
-        {:noreply, {socket, []}}
-      [{topic, data} | tail] ->
+        write_line("ERROR NO MESSAGE\n", socket)
+        {:noreply, {socket, [], name}}
+      [{topic, data, msg_id} | tail] ->
         valid_hash = :crypto.hash(:md5, data) |> Base.encode16(case: :lower)
         Logger.info("[#{__MODULE__}] Valid hash: #{valid_hash} - Received hash: #{hash}")
         if valid_hash == hash do
-          {:noreply, {socket, tail}}
+          Broker.TopicSuper.ack(topic, msg_id, name)
+          {:noreply, {socket, tail, name}}
         else
           write_data(topic, data, socket)
-          {:noreply, {socket, messages}}
+          {:noreply, {socket, messages, name}}
         end
     end
   end
@@ -48,26 +92,23 @@ defmodule Consumer.Client do
         case String.split(line) do
           ["SUBSCRIBE", topic] ->
             topic = String.trim(topic)
-            Logger.info("[#{__MODULE__}] Subscribing to topic #{topic}")
-            Consumer.ClientManager.subscribe(client_pid, topic)
-            messages = Broker.TopicSuper.get_data(topic)
-            Enum.each(messages, fn {_, data} -> write_data(topic, data, socket) end)
+            subscribe(client_pid, topic)
           ["UNSUBSCRIBE", topic] ->
             topic = String.trim(topic)
-            Logger.info("[#{__MODULE__}] Unsubscribing from topic #{topic}")
-            Consumer.ClientManager.unsubscribe(client_pid, topic)
+            unsubscribe(client_pid, topic)
           ["ACK", hash] ->
             hash = String.trim(hash)
-            Logger.info("[#{__MODULE__}] Acknowledging message #{hash}")
-            Consumer.Client.ack(client_pid, hash)
+            ack(client_pid, hash)
+          ["LOGIN", name] ->
+            name = String.trim(name)
+            login(client_pid, name)
           _ ->
-            Logger.error("[#{__MODULE__}] Invalid response from client: #{line}")
-            write_line("ERROR\n", socket)
+            write_line("ERROR INVALID COMMAND\n", socket)
         end
+        serve(socket, client_pid)
       {:error, err} ->
         Logger.error("[#{__MODULE__}] : #{inspect err}")
     end
-    serve(socket, client_pid)
   end
 
   defp write_data(topic, data, socket) do

@@ -26,17 +26,31 @@ defmodule Broker.TopicSuper do
     end)
   end
 
-  def get_data(topic) do
+  def get_data(topic, name) do
     case get_worker_pid(topic) do
       nil ->
         case new_topic(topic) do
           {:ok, pid} ->
-            Broker.Topic.get_data(pid)
+            Broker.Topic.get_data(pid, name)
           {:error} ->
             Logger.error("[#{__MODULE__}] Error getting data from topic #{topic}")
         end
       pid ->
-        Broker.Topic.get_data(pid)
+        Broker.Topic.get_data(pid, name)
+    end
+  end
+
+  def ack(topic, msg_id, name) do
+    case get_worker_pid(topic) do
+      nil ->
+        case new_topic(topic) do
+          {:ok, pid} ->
+            Broker.Topic.ack(pid, msg_id, name)
+          {:error} ->
+            Logger.error("[#{__MODULE__}] Error acking message #{msg_id} on topic #{topic}")
+        end
+      pid ->
+        Broker.Topic.ack(pid, msg_id, name)
     end
   end
 

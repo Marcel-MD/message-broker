@@ -18,8 +18,8 @@ defmodule Consumer.ClientManager do
     GenServer.cast(__MODULE__, {:unsubscribe, pid, topic})
   end
 
-  def notify(topic, data) do
-    GenServer.cast(__MODULE__, {:notify, topic, data})
+  def notify(topic, data, msg_id) do
+    GenServer.cast(__MODULE__, {:notify, topic, data, msg_id})
   end
 
   def handle_cast({:subscribe, pid, topic}, state) do
@@ -34,11 +34,11 @@ defmodule Consumer.ClientManager do
     {:noreply, new_state}
   end
 
-  def handle_cast({:notify, topic, data}, state) do
+  def handle_cast({:notify, topic, data, msg_id}, state) do
     Logger.info("[#{__MODULE__}] Notifying clients of topic #{topic}")
     state = Map.update(state, topic, [], fn clients -> clients end)
     Enum.each(state[topic], fn pid ->
-      Consumer.Client.notify(pid, topic, data)
+      Consumer.Client.notify(pid, topic, data, msg_id)
     end)
     {:noreply, state}
   end
