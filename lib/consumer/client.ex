@@ -31,6 +31,10 @@ defmodule Consumer.Client do
     GenServer.cast(pid, {:notify, topic, data, msg_id})
   end
 
+  def write_first_message(pid) do
+    GenServer.cast(pid, :write_first_message)
+  end
+
   def handle_cast({:login, name}, {socket, messages, _, resend}) do
     {:noreply, {socket, messages, name, resend}}
   end
@@ -43,8 +47,8 @@ defmodule Consumer.Client do
       Logger.info("[#{__MODULE__}] Subscribing to topic #{topic}")
       Consumer.ClientManager.subscribe(self(), topic)
       new_messages = Broker.TopicSuper.get_data(topic, name)
-      Enum.each(new_messages, fn {_, data, _} -> write_data(topic, data, socket) end)
       messages = messages ++ new_messages
+      write_first_message(messages, socket)
       {:noreply, {socket, messages, name, resend}}
     end
   end
@@ -57,13 +61,25 @@ defmodule Consumer.Client do
       Logger.info("[#{__MODULE__}] Unsubscribing from topic #{topic}")
       Consumer.ClientManager.unsubscribe(self(), topic)
       messages = Enum.filter(messages, fn {t, _, _} -> t != topic end)
+      write_first_message(messages, socket)
       {:noreply, {socket, messages, name, resend}}
     end
   end
 
   def handle_cast({:notify, topic, data, msg_id}, {socket, messages, name, resend}) do
-    messages = messages ++ [{topic, data, msg_id}]
-    write_data(topic, data, socket)
+    case messages do
+      [] ->
+        messages = messages ++ [{topic, data, msg_id}]
+        write_data(topic, data, socket)
+        {:noreply, {socket, messages, name, resend}}
+      _ ->
+        messages = messages ++ [{topic, data, msg_id}]
+        {:noreply, {socket, messages, name, resend}}
+    end
+  end
+
+  def handle_cast(:write_first_message, {socket, messages, name, resend}) do
+    write_first_message(messages, socket)
     {:noreply, {socket, messages, name, resend}}
   end
 
@@ -86,6 +102,7 @@ defmodule Consumer.Client do
           if resend == @max_resend do
             Broker.TopicSuper.ack(topic, msg_id, name)
             Broker.TopicSuper.publish([@dead_letter], data)
+            write_first_message(tail, socket)
             {:reply, :error, {socket, tail, name, 0}}
           else
             resend = resend + 1
@@ -93,6 +110,15 @@ defmodule Consumer.Client do
             {:reply, :error, {socket, messages, name, resend}}
           end
         end
+    end
+  end
+
+  defp write_first_message(messages, socket) do
+    case messages do
+      [] ->
+        :ok
+      [{topic, data, _} | _] ->
+        write_data(topic, data, socket)
     end
   end
 
@@ -116,7 +142,7 @@ defmodule Consumer.Client do
                     line = String.trim(line)
                     case line do
                       "PUBCOMP" ->
-                        :ok
+                        write_first_message(client_pid)
                       line ->
                         write_line("ERROR INVALID COMMAND\n", socket)
                         Logger.debug("[#{__MODULE__}] : Invalid command #{line}")
