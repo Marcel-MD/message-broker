@@ -24,10 +24,6 @@ defmodule Consumer.Client do
     GenServer.cast(pid, {:unsubscribe, topic})
   end
 
-  def ack(pid, hash) do
-    GenServer.cast(pid, {:ack, hash})
-  end
-
   def notify(pid, topic, data, msg_id) do
     GenServer.cast(pid, {:notify, topic, data, msg_id})
   end
@@ -68,7 +64,11 @@ defmodule Consumer.Client do
     {:noreply, {socket, messages, name}}
   end
 
-  def handle_cast({:ack, hash}, {socket, messages, name}) do
+  def ack(pid, hash) do
+    GenServer.call(pid, {:ack, hash})
+  end
+
+  def handle_call({:ack, hash}, _from, {socket, messages, name}) do
     case messages do
       [] ->
         write_line("ERROR NO MESSAGE\n", socket)
@@ -78,10 +78,10 @@ defmodule Consumer.Client do
         Logger.info("[#{__MODULE__}] Valid hash: #{valid_hash} - Received hash: #{hash}")
         if valid_hash == hash do
           Broker.TopicSuper.ack(topic, msg_id, name)
-          {:noreply, {socket, tail, name}}
+          {:reply, :ok, {socket, tail, name}}
         else
           write_data(topic, data, socket)
-          {:noreply, {socket, messages, name}}
+          {:reply, :error, {socket, messages, name}}
         end
     end
   end
@@ -96,14 +96,33 @@ defmodule Consumer.Client do
           ["UNSUBSCRIBE", topic] ->
             topic = String.trim(topic)
             unsubscribe(client_pid, topic)
-          ["ACK", hash] ->
+          ["PUBREC", hash] ->
             hash = String.trim(hash)
-            ack(client_pid, hash)
+            case ack(client_pid, hash) do
+              :ok ->
+                write_line("PUBREL\n", socket)
+                case :gen_tcp.recv(socket, 0) do
+                  {:ok, line} ->
+                    line = String.trim(line)
+                    case line do
+                      "PUBCOM" ->
+                        :ok
+                      line ->
+                        write_line("ERROR INVALID COMMAND\n", socket)
+                        Logger.debug("[#{__MODULE__}] : Invalid command #{line}")
+                    end
+                  {:error, err} ->
+                    Logger.error("[#{__MODULE__}] : #{inspect err}")
+                end
+              :error ->
+                Logger.debug("[#{__MODULE__}] : Invalid hash #{hash}")
+            end
           ["LOGIN", name] ->
             name = String.trim(name)
             login(client_pid, name)
-          _ ->
+          command ->
             write_line("ERROR INVALID COMMAND\n", socket)
+            Logger.debug("[#{__MODULE__}] : Invalid command #{inspect command}")
         end
         serve(socket, client_pid)
       {:error, err} ->

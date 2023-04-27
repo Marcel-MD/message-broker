@@ -19,9 +19,23 @@ defmodule Publisher.Server do
     case read_topics(socket) do
       {:ok, topics} ->
         data = read_data(socket, "")
-        Broker.TopicSuper.publish(topics, data)
+        write_line("PUBREC\n", socket)
+        case :gen_tcp.recv(socket, 0) do
+          {:ok, line} ->
+            line = String.trim(line)
+            case line do
+              "PUBREL" ->
+                Broker.TopicSuper.publish(topics, data)
+                write_line("PUBCOMP\n", socket)
+              line ->
+                Logger.debug("[#{__MODULE__}] Received #{line}")
+                write_line("ERROR\n", socket)
+            end
+          {:error, err} ->
+            Logger.error("[#{__MODULE__}] : #{inspect err}")
+        end
       {:error} ->
-        write_line("ERROR", socket)
+        write_line("ERROR\n", socket)
     end
     serve(socket)
   end

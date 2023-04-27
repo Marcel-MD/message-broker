@@ -33,10 +33,16 @@ Connected to localhost.
 Escape character is '^]'.
 
 BEGIN topic_name
-Hello World!
-Hello World!
-Hello World!
+message data
+message data
+message data
 END
+
+PUBREC
+
+PUBREL
+
+PUBCOMP
 ```
 
 ## Consumer
@@ -48,9 +54,19 @@ Trying 127.0.0.1...
 Connected to localhost.
 Escape character is '^]'.
 
+LOGIN consumer_name
+
 SUBSCRIBE topic_name
 
-UNSUBSCRIBE topic_name
+BEGIN topic_name
+message data
+message data
+message data
+END
 
-ACK message_data_md5_hash
+PUBREC message_data_md5_hash
+
+PUBREL
+
+PUBCOMP
 ```
