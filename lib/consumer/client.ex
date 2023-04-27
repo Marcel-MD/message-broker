@@ -2,6 +2,9 @@ defmodule Consumer.Client do
   require Logger
   use GenServer
 
+  @max_resend 3
+  @dead_letter "dead_letter"
+
   def start_link(socket) do
     GenServer.start_link(__MODULE__, socket)
   end
@@ -9,7 +12,7 @@ defmodule Consumer.Client do
   def init(socket) do
     client_pid = self()
     Task.start_link(fn -> serve(socket, client_pid) end)
-    {:ok, {socket, [], ""}}
+    {:ok, {socket, [], "", 0}}
   end
 
   def login(pid, name) do
@@ -28,47 +31,47 @@ defmodule Consumer.Client do
     GenServer.cast(pid, {:notify, topic, data, msg_id})
   end
 
-  def handle_cast({:login, name}, {socket, messages, _}) do
-    {:noreply, {socket, messages, name}}
+  def handle_cast({:login, name}, {socket, messages, _, resend}) do
+    {:noreply, {socket, messages, name, resend}}
   end
 
-  def handle_cast({:subscribe, topic}, {socket, messages, name}) do
+  def handle_cast({:subscribe, topic}, {socket, messages, name, resend}) do
     if name == "" do
       write_line("ERROR LOGIN FIRST\n", socket)
-      {:noreply, {socket, messages, name}}
+      {:noreply, {socket, messages, name, resend}}
     else
       Logger.info("[#{__MODULE__}] Subscribing to topic #{topic}")
       Consumer.ClientManager.subscribe(self(), topic)
       new_messages = Broker.TopicSuper.get_data(topic, name)
       Enum.each(new_messages, fn {_, data, _} -> write_data(topic, data, socket) end)
       messages = messages ++ new_messages
-      {:noreply, {socket, messages, name}}
+      {:noreply, {socket, messages, name, resend}}
     end
   end
 
-  def handle_cast({:unsubscribe, topic}, {socket, messages, name}) do
+  def handle_cast({:unsubscribe, topic}, {socket, messages, name, resend}) do
     if name == "" do
       write_line("ERROR LOGIN FIRST\n", socket)
-      {:noreply, {socket, messages, name}}
+      {:noreply, {socket, messages, name, resend}}
     else
       Logger.info("[#{__MODULE__}] Unsubscribing from topic #{topic}")
       Consumer.ClientManager.unsubscribe(self(), topic)
       messages = Enum.filter(messages, fn {t, _, _} -> t != topic end)
-      {:noreply, {socket, messages, name}}
+      {:noreply, {socket, messages, name, resend}}
     end
   end
 
-  def handle_cast({:notify, topic, data, msg_id}, {socket, messages, name}) do
+  def handle_cast({:notify, topic, data, msg_id}, {socket, messages, name, resend}) do
     messages = messages ++ [{topic, data, msg_id}]
     write_data(topic, data, socket)
-    {:noreply, {socket, messages, name}}
+    {:noreply, {socket, messages, name, resend}}
   end
 
   def ack(pid, hash) do
     GenServer.call(pid, {:ack, hash})
   end
 
-  def handle_call({:ack, hash}, _from, {socket, messages, name}) do
+  def handle_call({:ack, hash}, _from, {socket, messages, name, resend}) do
     case messages do
       [] ->
         write_line("ERROR NO MESSAGE\n", socket)
@@ -78,10 +81,17 @@ defmodule Consumer.Client do
         Logger.info("[#{__MODULE__}] Valid hash: #{valid_hash} - Received hash: #{hash}")
         if valid_hash == hash do
           Broker.TopicSuper.ack(topic, msg_id, name)
-          {:reply, :ok, {socket, tail, name}}
+          {:reply, :ok, {socket, tail, name, 0}}
         else
-          write_data(topic, data, socket)
-          {:reply, :error, {socket, messages, name}}
+          if resend == @max_resend do
+            Broker.TopicSuper.ack(topic, msg_id, name)
+            Broker.TopicSuper.publish([@dead_letter], data)
+            {:reply, :error, {socket, tail, name, 0}}
+          else
+            resend = resend + 1
+            write_data(topic, data, socket)
+            {:reply, :error, {socket, messages, name, resend}}
+          end
         end
     end
   end
@@ -105,7 +115,7 @@ defmodule Consumer.Client do
                   {:ok, line} ->
                     line = String.trim(line)
                     case line do
-                      "PUBCOM" ->
+                      "PUBCOMP" ->
                         :ok
                       line ->
                         write_line("ERROR INVALID COMMAND\n", socket)
