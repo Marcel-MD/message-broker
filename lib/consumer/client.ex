@@ -91,7 +91,7 @@ defmodule Consumer.Client do
     case messages do
       [] ->
         write_line("ERROR NO MESSAGE\n", socket)
-        {:noreply, {socket, [], name}}
+        {:reply, :error, {socket, messages, name, resend}}
       [{topic, data, msg_id} | tail] ->
         valid_hash = :crypto.hash(:md5, data) |> Base.encode16(case: :lower)
         Logger.info("[#{__MODULE__}] Valid hash: #{valid_hash} - Received hash: #{hash}")

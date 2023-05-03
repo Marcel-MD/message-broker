@@ -12,15 +12,21 @@ actor "Consumers" as C
 
 C -> CS: Connect
 CS -> CCS: New Client
+C -> CC: Login
 C -> CC: Subscribe
 CC -> CCM: Topic
 
 P -> PS: Message & Topic
+P <-- PS: PUBREC
+P -> PS: PUBREL
 PS -> BTS: Message & Topic
+P <-- PS: PUBCOMP
 BTS -> BT: Message & Topic
 BT -> CCM: Message & Topic
 CCM -> CC: Message & Topic
 CC -> C: Message & Topic
-CC <-- C: Hash
+CC <-- C: PUBREC Hash
+CC -> C: PUBREL
+CC <-- C: PUBCOMP
 
 @enduml
